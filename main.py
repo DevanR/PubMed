@@ -1,7 +1,5 @@
-import json
 from datetime import datetime
 
-import pubmed_parser as pp
 from Bio import Entrez
 from openpyxl import load_workbook, Workbook
 
@@ -13,11 +11,10 @@ def search(query):
     Entrez.email = EMAIL
     handle = Entrez.esearch(db='pubmed',
                             sort='pub+date',
-                            retmax='200',
                             retmode='xml',
+                            datetype='pdat',
                             mindate='2020/01/01',
                             maxdate=datetime.today().strftime('%Y/%m/%d'),
-                            datetype='pdat',
                             term=query)
     results = Entrez.read(handle)
     return results
@@ -26,7 +23,13 @@ def search(query):
 def fetch_details(id_list):
     ids = ','.join(id_list)
     Entrez.email = EMAIL
-    handle = Entrez.efetch(db='pubmed', retmode='xml', id=ids)
+    handle = Entrez.efetch(db='pubmed',
+                           sort='pub+date',
+                           retmode='xml',
+                           id=ids,
+                           datetype='pdat',
+                           mindate='2020/01/01',
+                           maxdate=datetime.today().strftime('%Y/%m/%d'))
     results = Entrez.read(handle)
     return results
 
@@ -57,6 +60,137 @@ def read_institutes(file_name):
 
     return institute_list
 
+def parse_paper(paper):
+
+    organisations = ['KK Women\'s and Children\'s Hospital', 'Kandang Kerbau Hospital']
+
+    departments = []
+
+    # Name of 1st author if from KKH
+    first_author = "NA"
+    if paper['MedlineCitation']['Article']['AuthorList'][0]['AffiliationInfo']:
+        affiliation = paper['MedlineCitation']['Article']['AuthorList'][0]['AffiliationInfo'][0]['Affiliation']
+        if any(org in affiliation for org in organisations):
+            last_name = paper['MedlineCitation']['Article']['AuthorList'][0]['LastName']
+            first_name = paper['MedlineCitation']['Article']['AuthorList'][0]['ForeName']
+            first_author = "{}, {}".format(first_name, last_name)
+            for org in organisations:
+                if org in affiliation:
+                    departments.append(org)
+
+    # Name of last author if from KKH
+    last_author = "NA"
+    if paper['MedlineCitation']['Article']['AuthorList'][-1]['AffiliationInfo']:
+        affiliation = paper['MedlineCitation']['Article']['AuthorList'][-1]['AffiliationInfo'][0]['Affiliation']
+        if any(org in affiliation for org in organisations):
+            last_name = paper['MedlineCitation']['Article']['AuthorList'][-1]['LastName']
+            first_name = paper['MedlineCitation']['Article']['AuthorList'][-1]['ForeName']
+            last_author = "{}, {}".format(first_name, last_name)
+            for org in organisations:
+                if org in affiliation:
+                    departments.append(org)
+
+    # KKH author if any
+    author_list = []
+    for author in paper['MedlineCitation']['Article']['AuthorList'][1:-1]:
+        if author['AffiliationInfo']:
+            affiliation = author['AffiliationInfo'][0]['Affiliation']
+            if any(org in affiliation for org in organisations):
+                any_last_name = author['LastName']
+                any_first_name = author['ForeName']
+                any_author = "{}, {}".format(any_first_name, any_last_name)
+                author_list.append(any_author)
+                for org in organisations:
+                    if org in affiliation:
+                        departments.append(org)
+
+    if not author_list:
+        author_list = "NA"
+
+    # Dept
+    if not departments:
+        departments = "NA"
+    else:
+        departments = set(departments)
+
+    # Authors
+    authors = []
+    for author in paper['MedlineCitation']['Article']['AuthorList']:
+        if 'LastName' and 'ForeName' in author.keys():
+            last_name = author['LastName']
+            first_name = author['ForeName']
+            author = "{}, {}".format(first_name, last_name)
+        else:
+            author = "{}".format(author['CollectiveName'])
+        authors.append(author)
+
+
+    #print("{}, {}, {}, {}, {}".format(first_author, last_author, author_list, departments, authors))
+
+    # Name of Publication
+    publication = paper['MedlineCitation']['Article']['ArticleTitle']
+
+    #print("{}".format(publication))
+
+    # JournalInfo
+    #title = paper['MedlineCitation']['Article']['Journal']['Title']
+    ISO = paper['MedlineCitation']['Article']['Journal']['ISOAbbreviation']
+
+    #print("{}".format(ISO))
+
+    # PublishedDate
+    pub_date = "NA"
+    if paper['MedlineCitation']['Article']['ArticleDate']:
+        year = paper['MedlineCitation']['Article']['ArticleDate'][0]['Year']
+        month = paper['MedlineCitation']['Article']['ArticleDate'][0]['Month']
+        day = paper['MedlineCitation']['Article']['ArticleDate'][0]['Day']
+        pub_date = "Published {}/{}/{}".format(year, month, day)
+    elif paper['MedlineCitation']['Article']['Journal']['JournalIssue']['PubDate']:
+
+        if 'Year' in paper['MedlineCitation']['Article']['Journal']['JournalIssue']['PubDate'].keys():
+            year = paper['MedlineCitation']['Article']['Journal']['JournalIssue']['PubDate']['Year']
+        else:
+            year =  ''
+        if 'Month' in paper['MedlineCitation']['Article']['Journal']['JournalIssue']['PubDate'].keys():
+            month = paper['MedlineCitation']['Article']['Journal']['JournalIssue']['PubDate']['Month']
+        else:
+            month =  ''
+        if 'Day' in paper['MedlineCitation']['Article']['Journal']['JournalIssue']['PubDate'].keys():
+            day = paper['MedlineCitation']['Article']['Journal']['JournalIssue']['PubDate']['Day']
+        else:
+            day =  ''
+        pub_date = "Published {}/{}/{}".format(year, month, day)
+
+    print(pub_date)
+
+
+#    # DOI
+#    paper['MedlineCitation']['PubmedData']['ArticleIdList'][2]
+#
+#    # IF
+#    # HTMLParser -> curl "https://www.resurchify.com/impact-factor-search.php?query=00368075"
+#    ISSN = paper['MedlineCitation']['MedlineJournalIndo']['ISSNLinking']
+#    URL = "https://www.resurchify.com/impact-factor-search.php?query={}".format(ISSN)
+#    import urllib.request
+#    content = urllib.request.urlopen(URL)
+#    read_content = content.read()
+#    from bs4 import BeautifulSoup
+#    soup = BeautifulSoup(read_content,'html.parser')
+#    if = float(soup.find_all(string=re.compile('IF:'))[0].split(': ')[1])
+#
+#    # PMID
+#    paper['MedlineCitation']['PMID']
+#
+#    # IF=0
+#    # IF<2
+#    # IF>2
+#
+#    # National Journal
+#    paper['MedlineCitation']['MedlineJournalInfo']['Country']
+#    # International Journal
+#    paper['MedlineCitation']['MedlineJournalInfo']['Country']
+#
+#    # return string
 
 if __name__ == '__main__':
 
@@ -79,15 +213,13 @@ if __name__ == '__main__':
 
         for i, paper in enumerate(papers['PubmedArticle']):
 
-            _ = ws1.cell(column=1, row=i+1, value="{0}".format(paper['MedlineCitation']['Article']['AuthorList']))
-            _ = ws1.cell(column=2, row=i+1, value="{0}".format(paper['MedlineCitation']['Article']['ArticleTitle']))
-            _ = ws1.cell(column=3, row=i+1, value="{0}".format(paper['MedlineCitation']['Article']['Journal']))
-            _ = ws1.cell(column=4, row=i+1, value="{0}".format(paper['MedlineCitation']['Article']['ELocationID']))
+            try:
+                parse_paper(paper)
+            except Exception as e:
+                print(e)
+                import pdb
+                pdb.set_trace()
 
-
-            #print(json.dumps(paper, indent=2))
-
-            #print(json.dumps(papers[0], indent=2, separators=(',', ':')))
 
         wb.save(filename='output.xlsx')
 
