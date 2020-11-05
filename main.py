@@ -1,4 +1,8 @@
 from datetime import datetime
+import urllib.request
+import re
+
+from bs4 import BeautifulSoup
 
 from Bio import Entrez
 from openpyxl import load_workbook, Workbook
@@ -124,19 +128,12 @@ def parse_paper(paper):
             author = "{}".format(author['CollectiveName'])
         authors.append(author)
 
-
-    #print("{}, {}, {}, {}, {}".format(first_author, last_author, author_list, departments, authors))
-
     # Name of Publication
     publication = paper['MedlineCitation']['Article']['ArticleTitle']
-
-    #print("{}".format(publication))
 
     # JournalInfo
     #title = paper['MedlineCitation']['Article']['Journal']['Title']
     ISO = paper['MedlineCitation']['Article']['Journal']['ISOAbbreviation']
-
-    #print("{}".format(ISO))
 
     # PublishedDate
     pub_date = "NA"
@@ -161,47 +158,47 @@ def parse_paper(paper):
             day =  ''
         pub_date = "Published {}/{}/{}".format(year, month, day)
 
-    print(pub_date)
+    # DOI
+    doi = 'NA'
+    for id in paper['MedlineCitation']['Article']['ELocationID']:
+        if id.attributes['EIdType'] == 'doi':
+            doi = str(id)
 
+    # IF
+    impact_factor = 0
+    try:
+        ISSN = paper['MedlineCitation']['MedlineJournalInfo']['ISSNLinking'].replace('-', '')
+        URL = "https://www.resurchify.com/impact-factor-search.php?query={}".format(ISSN)
+        content = urllib.request.urlopen(URL)
+        read_content = content.read()
+        soup = BeautifulSoup(read_content,'html.parser')
+        if soup.find_all(string=re.compile('IF:')):
+            impact_factor = float(soup.find_all(string=re.compile('IF:'))[0].split(': ')[1])
+    except Exception as e:
+        print("Error: Unable to retrieve IF.")
 
-#    # DOI
-#    paper['MedlineCitation']['PubmedData']['ArticleIdList'][2]
-#
-#    # IF
-#    # HTMLParser -> curl "https://www.resurchify.com/impact-factor-search.php?query=00368075"
-#    ISSN = paper['MedlineCitation']['MedlineJournalIndo']['ISSNLinking']
-#    URL = "https://www.resurchify.com/impact-factor-search.php?query={}".format(ISSN)
-#    import urllib.request
-#    content = urllib.request.urlopen(URL)
-#    read_content = content.read()
-#    from bs4 import BeautifulSoup
-#    soup = BeautifulSoup(read_content,'html.parser')
-#    if = float(soup.find_all(string=re.compile('IF:'))[0].split(': ')[1])
-#
-#    # PMID
-#    paper['MedlineCitation']['PMID']
-#
-#    # IF=0
-#    # IF<2
-#    # IF>2
-#
-#    # National Journal
-#    paper['MedlineCitation']['MedlineJournalInfo']['Country']
-#    # International Journal
-#    paper['MedlineCitation']['MedlineJournalInfo']['Country']
-#
-#    # return string
+    # PMID
+    pmid = paper['MedlineCitation']['PMID']
 
-if __name__ == '__main__':
+    # IF=0
+    if_zero = 1 if impact_factor == 0 else ''
+    # IF<2
+    if_less_than_two = 1 if  0 <impact_factor < 2 else ''
+    # IF>2
+    if_greater_than_two = 1 if impact_factor >=2 else ''
 
-    authors = read_authors(FILE_NAME)
-    institutes = read_institutes(FILE_NAME)
+    country = paper['MedlineCitation']['MedlineJournalInfo']['Country']
+    # National Journal
+    national = 1 if country == 'Singapore' else 0
+    # International Journal
+    international = not(national)
 
-    # Get Authors
-    #results = search(' OR '.join(authors))
+    row = [first_author, last_author, author_list, departments, authors publication, ISO, pub_date,
+           doi, impact_factor, pmid, if_zero, if_less_than_zero, if_greater_than_zero, national, international]
 
-    # Get Organisations
-    results = search(' OR '.join(institutes))
+    return row
+
+def output_excel(results):
 
     if results['IdList']:
         id_list = results['IdList']
@@ -214,14 +211,28 @@ if __name__ == '__main__':
         for i, paper in enumerate(papers['PubmedArticle']):
 
             try:
-                parse_paper(paper)
+                row = parse_paper(paper)
+
+                # Write to excel with template
+
             except Exception as e:
                 print(e)
-                import pdb
-                pdb.set_trace()
-
 
         wb.save(filename='output.xlsx')
 
     else:
         print('Nothing found!')
+
+if __name__ == '__main__':
+
+    authors = read_authors(FILE_NAME)
+    institutes = read_institutes(FILE_NAME)
+
+    # Get Authors
+    author_results = search(' OR '.join(authors))
+
+    # Get Organisations
+    org_results = search(' OR '.join(institutes))
+
+    for result in [author_results, org_results]:
+        output_excel(result)
