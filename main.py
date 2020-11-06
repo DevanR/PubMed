@@ -7,8 +7,10 @@ from bs4 import BeautifulSoup
 from Bio import Entrez
 from openpyxl import load_workbook, Workbook
 
+from writer import excel_writer, clear_output
+
 EMAIL = 'your.email@example.com'
-FILE_NAME = 'input.xlsx'
+input_file = 'input/input.xlsx'
 
 
 def search(query):
@@ -110,12 +112,14 @@ def parse_paper(paper):
 
     if not author_list:
         author_list = "NA"
+    else:
+        author_list = ', '.join(author_list)
 
     # Dept
     if not departments:
         departments = "NA"
     else:
-        departments = set(departments)
+        departments = ', '.join(set(departments))
 
     # Authors
     authors = []
@@ -189,50 +193,58 @@ def parse_paper(paper):
 
     country = paper['MedlineCitation']['MedlineJournalInfo']['Country']
     # National Journal
-    national = 1 if country == 'Singapore' else 0
+    national = 1 if country == 'Singapore' else ''
     # International Journal
-    international = not(national)
+    international = 1 if not(national) else ''
 
-    row = [first_author, last_author, author_list, departments, authors publication, ISO, pub_date,
-           doi, impact_factor, pmid, if_zero, if_less_than_zero, if_greater_than_zero, national, international]
+    row = {'first_author': first_author,
+           'last_author': last_author,
+           'authors': author_list,
+           'dept': departments,
+           'publication_name': ', '.join(authors) + '\n' + publication + '\n' + ISO + '\n' + pub_date + '\n' + doi,
+           'if': impact_factor,
+           'pmid': pmid,
+           'if_zero': if_zero,
+           'if_less': if_less_than_two,
+           'if_more': if_greater_than_two,
+           'national': national,
+           'international': international}
 
     return row
 
-def output_excel(results):
+def get_response(results):
+
+    rows = []
 
     if results['IdList']:
         id_list = results['IdList']
         papers = fetch_details(id_list)
 
-        wb = Workbook()
-        ws1 = wb.active
-        ws1.title = 'KKH'
-
         for i, paper in enumerate(papers['PubmedArticle']):
 
             try:
                 row = parse_paper(paper)
-
-                # Write to excel with template
-
+                row['S/N'] = i+1
+                rows.append(row)
             except Exception as e:
                 print(e)
-
-        wb.save(filename='output.xlsx')
-
     else:
         print('Nothing found!')
 
+    return rows
+
 if __name__ == '__main__':
 
-    authors = read_authors(FILE_NAME)
-    institutes = read_institutes(FILE_NAME)
+    clear_output()
 
     # Get Authors
-    author_results = search(' OR '.join(authors))
+#    authors = read_authors(input_file)
+#    author_results = search(' OR '.join(authors))
+#    response = get_response(author_results)
+#    excel_writer('Names', response)
 
     # Get Organisations
+    institutes = read_institutes(input_file)
     org_results = search(' OR '.join(institutes))
-
-    for result in [author_results, org_results]:
-        output_excel(result)
+    response = get_response(org_results)
+    excel_writer('Institutes', response)
