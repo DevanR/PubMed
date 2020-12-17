@@ -16,29 +16,24 @@ input_file = 'input/input.xlsx'
 def search(query):
     Entrez.email = EMAIL
     handle = Entrez.esearch(db='pubmed',
-                            sort='pub+date',
                             retmode='xml',
+                            retmax=3000,
                             datetype='pdat',
                             mindate='2020/01/01',
                             maxdate=datetime.today().strftime('%Y/%m/%d'),
                             term=query)
     results = Entrez.read(handle)
-    return results
 
+    return results
 
 def fetch_details(id_list):
     ids = ','.join(id_list)
     Entrez.email = EMAIL
     handle = Entrez.efetch(db='pubmed',
-                           sort='pub+date',
                            retmode='xml',
-                           id=ids,
-                           datetype='pdat',
-                           mindate='2020/01/01',
-                           maxdate=datetime.today().strftime('%Y/%m/%d'))
+                           id=ids)
     results = Entrez.read(handle)
     return results
-
 
 def read_authors(file_name):
     wb = load_workbook(file_name)
@@ -51,7 +46,6 @@ def read_authors(file_name):
                 author_ws.cell(row=i, column=4).value + '[Author]')
 
     return author_list
-
 
 def read_institutes(file_name):
     wb = load_workbook(file_name)
@@ -238,10 +232,10 @@ if __name__ == '__main__':
     clear_output()
 
     # Get Authors
-#    authors = read_authors(input_file)
-#    author_results = search(' OR '.join(authors))
-#    response = get_response(author_results)
-#    excel_writer('Names', response)
+    authors = read_authors(input_file)
+    author_results = search(' OR '.join(authors))
+    response = get_response(author_results)
+    excel_writer('Names', response)
 
     # Get Organisations
     institutes = read_institutes(input_file)
