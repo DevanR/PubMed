@@ -1,0 +1,9 @@
+beautifulsoup4==4.9.3
+biopython==1.78
+bs4==0.0.1
+dill==0.3.3
+et-xmlfile==1.0.1
+jdcal==1.4.1
+numpy==1.19.4
+openpyxl==3.0.5
+soupsieve==2.0.1
